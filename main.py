@@ -9,23 +9,33 @@ import os
 import sys
 import threading
 import time
-import tkinter as tk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app import theme as T                                   # noqa: E402
 from app.core import repo as repo_core                       # noqa: E402
-from app.core import startup as startup_core                 # noqa: E402
-from app.core.benchmark import RenderTest, performance_index, run_cpu_bench  # noqa: E402
-from app.core.booster import IS_WIN, Booster                 # noqa: E402
-from app.core.logstore import LogStore                       # noqa: E402
-from app.core.settings_store import Settings                 # noqa: E402
-from app.core.stats import SystemStats                       # noqa: E402
-from app.i18n import detect, lang, set_lang, t               # noqa: E402
-from app.ui import dashboard, logpage, optimizer, settings_page  # noqa: E402
-from app.ui.frame import AppFrame                            # noqa: E402
-from app.ui.logo import asset_logo_path, draw_logo, load_logo_image  # noqa: E402
-from app.ui.widgets import NeonButton, StatBar, font         # noqa: E402
+from app.core.benchmark import run_cpu_bench                 # noqa: E402
+
+# GUI imports are guarded so the CLI modes (--bench / --version) still work
+# on interpreters without Tk.
+try:
+    import tkinter as tk
+    from app.core import startup as startup_core
+    from app.core.benchmark import RenderTest, performance_index
+    from app.core.booster import IS_WIN, Booster
+    from app.core.logstore import LogStore
+    from app.core.settings_store import Settings
+    from app.core.stats import SystemStats
+    from app.i18n import detect, lang, set_lang, t
+    from app.ui import dashboard, logpage, optimizer, settings_page
+    from app.ui.frame import AppFrame
+    from app.ui.logo import asset_logo_path, draw_logo, load_logo_image
+    from app.ui.widgets import NeonButton, StatBar, font
+    _GUI_OK = True
+    _GUI_ERR = None
+except Exception as _e:  # pragma: no cover
+    _GUI_OK = False
+    _GUI_ERR = _e
 
 
 def _is_admin():
@@ -598,6 +608,15 @@ def show_splash(app):
 
 
 def main():
+    if not _GUI_OK:
+        sys.stderr.write(
+            "ERROR: this Python has no Tkinter (GUI toolkit).\n"
+            "  Windows : install Python from https://www.python.org (Tkinter is\n"
+            "            included) or simply run install.bat - the installer\n"
+            "            sets up everything automatically.\n"
+            "  Linux   : sudo apt install python3-tk\n"
+            f"  detail  : {_GUI_ERR}\n")
+        sys.exit(1)
     app = NeonApp()
     show_splash(app)
     app.root.mainloop()

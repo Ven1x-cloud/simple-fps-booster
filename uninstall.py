@@ -48,8 +48,10 @@ def main():
     quiet = "--yes" in sys.argv
     print(f"{PRODUCT} - uninstaller")
     install_dir = default_install_dir()
-    if len(sys.argv) > 1 and sys.argv[1].startswith("--dest="):
-        install_dir = sys.argv[1].split("=", 1)[1]
+    for a in sys.argv[1:]:
+        if a.startswith("--dest="):
+            install_dir = a.split("=", 1)[1]
+            break
     state = read_state(install_dir)
     print(f"  install dir : {install_dir}")
     print(f"  repository  : {state.get('repo', '?')} @ {state.get('branch', '?')}")

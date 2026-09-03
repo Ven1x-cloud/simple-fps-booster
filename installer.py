@@ -311,7 +311,6 @@ def main():
     if not dry:
         if os.path.isdir(appdir):
             shutil.rmtree(appdir, ignore_errors=True)
-        os.makedirs(appdir, exist_ok=True)
         shutil.copytree(src, appdir,
                         ignore=shutil.ignore_patterns(".git", "__pycache__",
                                                       "*.pyc", "venv"))
