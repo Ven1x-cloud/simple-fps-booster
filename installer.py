@@ -155,7 +155,9 @@ def parse_repo(spec):
 
 def fetch_repo(owner, repo, branch, workdir, dry=False):
     """Clone (or tarball-download) the selected repository. Returns app dir."""
-    dest = os.path.join(workdir, f"{owner}-{repo}-{branch}")
+    slug = (f"{owner}-{repo}-{branch}"
+            .replace("/", "_").replace("\\", "_").replace(" ", "_"))
+    dest = os.path.join(workdir, slug)
     if os.path.isdir(dest):
         shutil.rmtree(dest, ignore_errors=True)
     os.makedirs(workdir, exist_ok=True)
