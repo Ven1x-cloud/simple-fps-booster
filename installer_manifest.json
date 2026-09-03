@@ -1,0 +1,20 @@
+{
+  "product": {
+    "name": "Neon FPS Booster",
+    "version": "2.0.0",
+    "min_python": "3.9",
+    "homepage": "https://github.com/Ven1x-cloud/simple-fps-booster"
+  },
+  "entry": "main.py",
+  "requirements": "requirements.txt",
+  "icon": {
+    "source": "assets/logo.png",
+    "output": "assets/app.ico"
+  },
+  "shortcuts": {
+    "desktop": true,
+    "startmenu": true,
+    "name": "Neon FPS Booster"
+  },
+  "commands": []
+}
