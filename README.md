@@ -24,9 +24,11 @@ uit de geselecteerde repository, dependencies in een geïsoleerde venv te instal
 shortcuts te maken en optioneel de app te starten.
 
 ```bat
-:: of met één regel in een terminal:
-curl -L https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py -o installer.py
-python installer.py
+:: óf met één regel in een terminal (Windows 10+):
+curl -L https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py -o installer.py && python installer.py
+
+:: PowerShell variant:
+powershell -NoProfile -c "iex ((New-Object Net.WebClient).DownloadString('https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py'))"
 ```
 
 ## ✨ Features

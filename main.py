@@ -6,6 +6,7 @@ Run:   python main.py           GUI
        python main.py --version
 """
 import os
+import queue
 import sys
 import threading
 import time
@@ -66,6 +67,7 @@ class NeonApp:
         self._last_draw_fps = 0.0
         self._tick_n = 0
         self._render_test = None
+        self._ui_queue = queue.Queue()
         self.current_page = "dashboard"
         self.pages = {}
 
@@ -86,7 +88,8 @@ class NeonApp:
 
         threading.Thread(target=self._stats_loop, daemon=True).start()
         threading.Thread(target=self._autoprio_loop, daemon=True).start()
-        self.root.after(200, self._tick)
+        self.root.after(50, self._process_ui_queue)
+        self.root.after(250, self._tick)
 
         self.log.info(t("log.started"))
         if not self.admin and IS_WIN:
@@ -94,10 +97,26 @@ class NeonApp:
 
     # ---------------- helpers ----------------
     def _safe_after(self, ms, fn):
+        """Thread-safe: schedule fn on the Tk main thread (via queue).
+
+        Tk is NOT thread-safe, so worker threads never call root.after
+        directly - they enqueue and the main loop drains the queue.
+        """
         try:
-            self.root.after(ms, fn)
+            self._ui_queue.put((ms, fn))
         except Exception:
             pass
+
+    def _process_ui_queue(self):
+        try:
+            while True:
+                ms, fn = self._ui_queue.get_nowait()
+                self.root.after(ms, fn)
+        except queue.Empty:
+            pass
+        except Exception:
+            pass
+        self.root.after(50, self._process_ui_queue)
 
     def stats_refresh(self):
         self._stats_dirty = True
@@ -452,7 +471,9 @@ class NeonApp:
     def set_lang(self, code):
         self.settings.set("lang", code)
         set_lang(code)
-        self._rebuild_ui_text()
+        # defer the rebuild: we may be inside a click handler on a widget
+        # that is about to be destroyed
+        self._safe_after(80, self._rebuild_ui_text)
         self.log.info(f"language: {code}")
 
     def _rebuild_ui_text(self):
@@ -467,7 +488,7 @@ class NeonApp:
         self.settings.reset()
         stored = self.settings.get("lang", "auto")
         set_lang(detect() if stored == "auto" else stored)
-        self._rebuild_ui_text()
+        self._safe_after(80, self._rebuild_ui_text)
         self.log.info(t("set.reset.done"))
 
     def set_startup(self, enabled):

@@ -13,11 +13,11 @@ Usage:
     python installer.py --dry-run                  show what would happen
     python installer.py --startup --no-shortcut
 
-One-liner (Windows, PowerShell / cmd):
-    py -3 -c "import urllib.request,os;os.system('py -3 ' + urllib.request.urlopen('https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py').read().decode()[:0] or '')"
-
-Simpler one-liner:
+One-liner (Windows 10+ cmd):
     curl -L https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py -o installer.py && python installer.py
+
+One-liner (PowerShell):
+    powershell -NoProfile -c "iex ((New-Object Net.WebClient).DownloadString('https://github.com/Ven1x-cloud/simple-fps-booster/raw/main/installer.py'))"
 """
 import argparse
 import json
