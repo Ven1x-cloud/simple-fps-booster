@@ -52,6 +52,62 @@ def _is_admin():
         return False
 
 
+def _crash_log_path():
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:
+        base = os.path.join(os.path.expanduser("~"), ".config")
+    d = os.path.join(base, "NeonFPSBooster")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(d, "crash.log")
+
+
+def _write_crash(where, text):
+    try:
+        import datetime
+        with open(_crash_log_path(), "a", encoding="utf-8") as f:
+            f.write(f"\n===== {datetime.datetime.now().isoformat()}  [{where}] =====\n")
+            f.write(str(text).rstrip() + "\n")
+    except Exception:
+        pass
+
+
+def _install_crash_hooks():
+    """Log uncaught exceptions (main + worker threads) to crash.log and show
+    a dialog, so a crash is never silent when running under pythonw."""
+    import traceback
+
+    def _dialog(msg):
+        try:
+            from tkinter import messagebox
+            messagebox.showerror("Neon FPS Booster - crash", msg)
+        except Exception:
+            pass
+
+    def hook(exc_type, exc, tb):
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
+        _write_crash("main thread", text)
+        try:
+            sys.stderr.write(text)
+        except Exception:
+            pass
+        _dialog(f"Neon FPS Booster crashed:\n\n{exc}\n\nDetails: {_crash_log_path()}")
+
+    sys.excepthook = hook
+
+    def thread_hook(args):
+        if getattr(args, "exc_type", None) is None:
+            return
+        text = "".join(traceback.format_exception(
+            args.exc_type, args.exc_value, args.exc_traceback))
+        _write_crash(f"thread: {getattr(args, 'thread', '?')}", text)
+
+    threading.excepthook = thread_hook
+
+
 class NeonApp:
     """Application orchestrator: sidebar, pages, workers, boost flow."""
 
@@ -111,7 +167,15 @@ class NeonApp:
         try:
             while True:
                 ms, fn = self._ui_queue.get_nowait()
-                self.root.after(ms, fn)
+
+                def run(fn=fn):
+                    try:
+                        fn()
+                    except Exception:
+                        import traceback
+                        _write_crash("ui callback", traceback.format_exc())
+
+                self.root.after(ms, run)
         except queue.Empty:
             pass
         except Exception:
@@ -604,6 +668,11 @@ def show_splash(app):
     steps = 8
 
     def step(i=0):
+        try:
+            if not sp.winfo_exists():
+                return
+        except Exception:
+            return
         if i < steps:
             try:
                 cv.coords(fg, bar_x1, 10,
@@ -618,6 +687,11 @@ def show_splash(app):
                 except Exception:
                     pass
                 root.deiconify()
+                try:
+                    root.update_idletasks()
+                except Exception:
+                    pass
+                root.ensure_visible()
                 root.lift()
                 try:
                     root.focus_force()
@@ -628,7 +702,7 @@ def show_splash(app):
     sp.after(120, step)
 
 
-def main():
+def main(debug=False):
     if not _GUI_OK:
         sys.stderr.write(
             "ERROR: this Python has no Tkinter (GUI toolkit).\n"
@@ -638,7 +712,14 @@ def main():
             "  Linux   : sudo apt install python3-tk\n"
             f"  detail  : {_GUI_ERR}\n")
         sys.exit(1)
+    _install_crash_hooks()
+    if debug:
+        print(f"[debug] {T.PRODUCT} v{T.VERSION} - console logging on")
+        print(f"[debug] crash log: {_crash_log_path()}")
     app = NeonApp()
+    if debug:
+        app.log.subscribe(
+            lambda e: print(f"  [{e['level']:5}] {e['msg']}", flush=True))
     show_splash(app)
     app.root.mainloop()
     return app
@@ -652,7 +733,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(T.VERSION)
         sys.exit(0)
+    _debug = "--debug" in sys.argv
     try:
-        main()
+        main(debug=_debug)
     except KeyboardInterrupt:
         sys.exit(0)

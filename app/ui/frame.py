@@ -182,6 +182,24 @@ class AppFrame(tk.Tk):
                     pass
             self._maximized = False
 
+    def ensure_visible(self):
+        """Force the (borderless) window to be shown/raised after deiconify.
+
+        Windows can keep a caption-less window hidden after deiconify;
+        ShowWindow + a topmost toggle is the reliable fix.
+        """
+        if platform.system() == "Windows" and ctypes is not None:
+            try:
+                ctypes.windll.user32.ShowWindow(self.winfo_id(), 5)  # SW_SHOW
+            except Exception:
+                pass
+        try:
+            self.attributes("-topmost", True)
+            self.attributes("-topmost", False)
+            self.lift()
+        except Exception:
+            pass
+
     def close_win(self):
         try:
             if self._on_close:
