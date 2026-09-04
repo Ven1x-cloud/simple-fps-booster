@@ -620,15 +620,28 @@ class NeonApp:
             pass
 
 
-def show_splash(app):
-    """Short boot splash, then reveal the main window."""
-    root = app.root
-    sp = tk.Toplevel(root)
+def show_splash():
+    """Short standalone boot splash with its own temporary root window.
+
+    The main app window is created AFTER this returns, so it is never in a
+    hidden ("withdrawn") state when its borderless style is applied -
+    Windows keeps withdrawn+borderless windows invisible, which caused the
+    "nothing shows up" bug.
+    """
+    tmp = tk.Tk()
+    tmp.withdraw()
+    try:
+        tmp.update_idletasks()
+    except Exception:
+        pass
+    sp = tk.Toplevel(tmp)
     sp.overrideredirect(True)
     sp.configure(bg=T.BG0)
     w, h = 500, 330
-    x = root.winfo_rootx() + max(0, (root.winfo_width() - w) // 2)
-    y = root.winfo_rooty() + max(0, (root.winfo_height() - h) // 2)
+    sw = sp.winfo_screenwidth()
+    sh = sp.winfo_screenheight()
+    x = max(0, (sw - w) // 2)
+    y = max(16, (sh - h) // 2 - 24)
     sp.geometry(f"{w}x{h}+{x}+{y}")
     try:
         sp.attributes("-topmost", True)
@@ -655,7 +668,7 @@ def show_splash(app):
     tk.Label(inner, text=T.CODE_NAME, bg=T.BG1, fg=T.ACCENT,
              font=font(11, True)).place(x=(w - 2) // 2, y=198, anchor="n")
 
-    bar_x1, bar_x2, bar_y1, bar_y2 = 150, w - 150, 250, 258
+    bar_x1, bar_x2 = 150, w - 150
     cv = tk.Canvas(inner, width=w - 2, height=h - 2, bg=T.BG1,
                    highlightthickness=0)
     cv.place(x=0, y=240)
@@ -686,20 +699,19 @@ def show_splash(app):
                     sp.destroy()
                 except Exception:
                     pass
-                root.deiconify()
                 try:
-                    root.update_idletasks()
-                except Exception:
-                    pass
-                root.ensure_visible()
-                root.lift()
-                try:
-                    root.focus_force()
+                    tmp.destroy()
                 except Exception:
                     pass
             sp.after(180, go)
 
     sp.after(120, step)
+    try:
+        sp.lift()
+        sp.focus_force()
+    except Exception:
+        pass
+    tmp.mainloop()
 
 
 def main(debug=False):
