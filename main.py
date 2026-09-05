@@ -131,8 +131,11 @@ class NeonApp:
         set_lang(detect() if stored == "auto" else stored)
 
         self.root = AppFrame(t("titlebar.app"), t("titlebar.tagline"), T.VERSION)
-        self.root.withdraw()
         self.root._on_close = self.shutdown
+        # start small: the splash covers it, then show_full() + borderless
+        # (single Tk interpreter, window never withdrawn - on Windows a
+        # withdrawn borderless window stays invisible)
+        self.root._center(500, 330)
 
         self._build_sidebar()
         self.content = tk.Frame(self.root.body, bg=T.BG0)
@@ -620,36 +623,36 @@ class NeonApp:
             pass
 
 
-def show_splash():
-    """Short standalone boot splash with its own temporary root window.
+def show_splash(app):
+    """Boot splash as an overlay on top of the main window.
 
-    The main app window is created AFTER this returns, so it is never in a
-    hidden ("withdrawn") state when its borderless style is applied -
-    Windows keeps withdrawn+borderless windows invisible, which caused the
-    "nothing shows up" bug.
+    Single Tk interpreter: the main window already exists (visible, small),
+    so no destroyed-interpreter callbacks ("invalid command name ...") and
+    no withdrawn+borderless invisibility. When the splash ends, the main
+    window is enlarged and its title bar is removed.
     """
-    tmp = tk.Tk()
-    tmp.withdraw()
+    root = app.root
     try:
-        tmp.update_idletasks()
+        parts = root.winfo_geometry().split("+")
+        wh = parts[0].split("x")
+        w, h = int(wh[0]), int(wh[1])
+        x = int(parts[1]) if len(parts) > 1 else 0
+        y = int(parts[2]) if len(parts) > 2 else 0
     except Exception:
-        pass
-    sp = tk.Toplevel(tmp)
+        w, h, x, y = 500, 330, root.winfo_rootx(), root.winfo_rooty()
+
+    sp = tk.Toplevel(root)
     sp.overrideredirect(True)
     sp.configure(bg=T.BG0)
-    w, h = 500, 330
-    sw = sp.winfo_screenwidth()
-    sh = sp.winfo_screenheight()
-    x = max(0, (sw - w) // 2)
-    y = max(16, (sh - h) // 2 - 24)
-    sp.geometry(f"{w}x{h}+{x}+{y}")
+    # extend upward to cover the temporary native title bar of the main window
+    sp.geometry(f"{w}x{h + 34}+{x}+{y - 34}")
     try:
         sp.attributes("-topmost", True)
     except Exception:
         pass
     inner = tk.Frame(sp, bg=T.BG1, highlightbackground=T.BORDER_HI,
                      highlightthickness=1)
-    inner.place(x=1, y=1, width=w - 2, height=h - 2)
+    inner.place(x=1, y=35, width=w - 2, height=h - 2)
 
     logo_c = tk.Canvas(inner, width=110, height=110, bg=T.BG1,
                        highlightthickness=0)
@@ -700,7 +703,15 @@ def show_splash():
                 except Exception:
                     pass
                 try:
-                    tmp.destroy()
+                    root.update_idletasks()
+                except Exception:
+                    pass
+                root.show_full(T.WINDOW_W, T.WINDOW_H)
+                root._make_borderless()
+                root.ensure_visible()
+                root.lift()
+                try:
+                    root.focus_force()
                 except Exception:
                     pass
             sp.after(180, go)
@@ -711,7 +722,6 @@ def show_splash():
         sp.focus_force()
     except Exception:
         pass
-    tmp.mainloop()
 
 
 def main(debug=False):

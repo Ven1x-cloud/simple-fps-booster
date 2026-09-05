@@ -182,6 +182,10 @@ class AppFrame(tk.Tk):
                     pass
             self._maximized = False
 
+    def show_full(self, w=T.WINDOW_W, h=T.WINDOW_H):
+        """Restore the full window size, centered."""
+        self._center(w, h)
+
     def ensure_visible(self):
         """Force the (borderless) window to be shown/raised after deiconify.
 
