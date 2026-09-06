@@ -94,7 +94,12 @@ def _install_crash_hooks():
             sys.stderr.write(text)
         except Exception:
             pass
-        _dialog(f"Neon FPS Booster crashed:\n\n{exc}\n\nDetails: {_crash_log_path()}")
+        # include the last lines of the traceback so a screenshot of this
+        # dialog is enough to diagnose the crash
+        tail = "\n".join(text.strip().splitlines()[-10:])
+        _dialog(f"Neon FPS Booster crashed:\n\n{exc}\n\n"
+                f"--- traceback (tail) ---\n{tail}\n\n"
+                f"Full log: {_crash_log_path()}")
 
     sys.excepthook = hook
 
