@@ -72,9 +72,11 @@ class NeonButton(tk.Canvas):
         self._hover = False
         self._text = text
         self._padx, self._pady, self._radius = padx, pady, radius
-        self._w = text_width(self._font, text) + padx * 2
-        self._h = self._font.metrics("linespace") + pady * 2
-        super().__init__(master, width=self._w, height=self._h,
+        # NOTE: pixel sizes must NOT live in self._w/self._h - tkinter uses
+        # _w internally as the widget's Tcl path name.
+        self._width_px = text_width(self._font, text) + padx * 2
+        self._height_px = self._font.metrics("linespace") + pady * 2
+        super().__init__(master, width=self._width_px, height=self._height_px,
                          bg=master.cget("bg"), highlightthickness=0, **kw)
         self._draw()
         self.bind("<Enter>", lambda e: self._hover_set(True))
@@ -105,17 +107,18 @@ class NeonButton(tk.Canvas):
             fg, border = s["fg"], s["border"]
         else:
             bg, fg, border = T.BG1, T.TEXT_FAINT, T.BORDER
-        round_rect(self, 1, 1, self._w - 1, self._h - 1, self._radius,
-                   fill=bg, outline=border, width=1)
-        self.create_text(self._w / 2, self._h / 2,
+        round_rect(self, 1, 1, self._width_px - 1, self._height_px - 1,
+                   self._radius, fill=bg, outline=border, width=1)
+        self.create_text(self._width_px / 2, self._height_px / 2,
                          text=self._text, fill=fg, font=self._font)
 
     def set_text(self, text):
         if text == self._text:
             return
         self._text = text
-        self._w = max(self._w, text_width(self._font, text) + self._padx * 2)
-        self.config(width=self._w)
+        self._width_px = max(self._width_px,
+                              text_width(self._font, text) + self._padx * 2)
+        self.config(width=self._width_px)
         self._draw()
 
     def set_enabled(self, v):
@@ -129,7 +132,7 @@ class Toggle(tk.Canvas):
     def __init__(self, master, value=False, command=None, width=46, height=24):
         self._value = bool(value)
         self._command = command
-        self._w, self._h = width, height
+        self._width_px, self._height_px = width, height
         super().__init__(master, width=width, height=height,
                          bg=master.cget("bg"), highlightthickness=0,
                          cursor="hand2")
@@ -161,11 +164,12 @@ class Toggle(tk.Canvas):
         on = self._value
         pill = T.ACCENT if on else T.BG3
         border = T.ACCENT if on else T.BORDER_HI
-        round_rect(self, 1, 1, self._w - 1, self._h - 1, self._h / 2 - 1,
-                   fill=pill, outline=border, width=1)
-        r = self._h / 2 - 4
-        cx = (self._w - r - 5) if on else (r + 5)
-        self.create_oval(cx - r, self._h / 2 - r, cx + r, self._h / 2 + r,
+        round_rect(self, 1, 1, self._width_px - 1, self._height_px - 1,
+                   self._height_px / 2 - 1, fill=pill, outline=border, width=1)
+        r = self._height_px / 2 - 4
+        cx = (self._width_px - r - 5) if on else (r + 5)
+        self.create_oval(cx - r, self._height_px / 2 - r,
+                         cx + r, self._height_px / 2 + r,
                          fill="#eafff2" if on else T.TEXT_FAINT, outline="")
 
 
@@ -175,7 +179,7 @@ class StatBar(tk.Canvas):
     def __init__(self, master, w=150, h=8, color=T.ACCENT):
         super().__init__(master, width=w, height=h,
                          bg=master.cget("bg"), highlightthickness=0)
-        self._w, self._h, self._color = w, h, color
+        self._width_px, self._height_px, self._color = w, h, color
         self._val = 0.0
         self._draw()
 
@@ -188,12 +192,12 @@ class StatBar(tk.Canvas):
 
     def _draw(self):
         self.delete("all")
-        round_rect(self, 0, 0, self._w - 1, self._h - 1, self._h / 2,
-                   fill=T.BG3, outline="")
-        w = self._w * self._val / 100.0
+        round_rect(self, 0, 0, self._width_px - 1, self._height_px - 1,
+                   self._height_px / 2, fill=T.BG3, outline="")
+        w = self._width_px * self._val / 100.0
         if w > 5:
-            round_rect(self, 0, 0, w, self._h - 1, self._h / 2,
-                       fill=self._color, outline="")
+            round_rect(self, 0, 0, w, self._height_px - 1,
+                       self._height_px / 2, fill=self._color, outline="")
 
 
 class Gauge(tk.Canvas):
@@ -247,7 +251,7 @@ class LineChart(tk.Canvas):
     """Live line chart with auto-scaling, grid and trailing value label."""
 
     def __init__(self, master, w=420, h=190, samples=90, color=T.ACCENT, unit=""):
-        self._w, self._h = w, h
+        self._width_px, self._height_px = w, h
         self._samples = samples
         self._color = color
         self._unit = unit
@@ -268,9 +272,10 @@ class LineChart(tk.Canvas):
         self._draw()
 
     def resize(self, w, h):
-        if w > 60 and h > 60 and (int(w) != self._w or int(h) != self._h):
-            self._w, self._h = int(w), int(h)
-            self.config(width=self._w, height=self._h)
+        if w > 60 and h > 60 and (int(w) != self._width_px
+                                  or int(h) != self._height_px):
+            self._width_px, self._height_px = int(w), int(h)
+            self.config(width=self._width_px, height=self._height_px)
             self._draw()
 
     def clear_data(self):
@@ -281,7 +286,7 @@ class LineChart(tk.Canvas):
         c = self
         c.delete("all")
         pad_l, pad_r, pad_t, pad_b = 6, 6, 20, 8
-        w, h = self._w, self._h
+        w, h = self._width_px, self._height_px
         if w < 40 or h < 40:
             return
         data = self._data
