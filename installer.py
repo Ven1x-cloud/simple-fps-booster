@@ -240,6 +240,22 @@ def latest_commit(appdir):
 
 
 # ---------------------------------------------------------------- install
+def desktop_folder():
+    """Real user Desktop - handles the OneDrive known-folder move on Win11,
+    where %USERPROFILE%\\Desktop is no longer the desktop Explorer shows."""
+    if not IS_WIN:
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion"
+                            r"\Explorer\User Shell Folders") as k:
+            raw, _ = winreg.QueryValueEx(k, "Desktop")
+        return os.path.expandvars(str(raw))
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
 def make_shortcut(path, target, args, workdir, icon=None):
     """Create a .lnk via PowerShell (Windows only)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -411,8 +427,17 @@ def main():
     launched_target = os.path.join(appdir, "main.py")
     created = []
     if IS_WIN and not args.no_shortcut and not dry:
-        desktop = os.path.join(os.path.expanduser("~"), "Desktop", f"{name}.lnk")
-        if shortcuts.get("desktop", True) and make_shortcut(
+        desktop = os.path.join(desktop_folder(), f"{name}.lnk")
+        legacy = os.path.join(os.path.expanduser("~"), "Desktop", f"{name}.lnk")
+        if os.path.exists(legacy) and not os.path.exists(desktop):
+            try:
+                os.makedirs(os.path.dirname(desktop), exist_ok=True)
+                os.replace(legacy, desktop)
+                ok(f"moved existing shortcut to {desktop}")
+            except Exception:
+                pass
+        if shortcuts.get("desktop", True) and not os.path.exists(desktop) \
+                and make_shortcut(
                 desktop, pythonw(venv_dir), f'"{launched_target}"',
                 appdir, icon_path):
             ok(desktop)

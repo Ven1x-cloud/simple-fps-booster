@@ -499,18 +499,35 @@ class NeonApp:
 
     # ---------------- auto game mode ----------------
     def _autoprio_loop(self):
+        timer_on = False
+        tip_done = False
         while True:
             time.sleep(2.0)
             try:
                 if not self.settings.get("opt.autoprio", True):
+                    if timer_on:
+                        self.stats.game_timer_resolution(False)
+                        timer_on = False
                     continue
                 prio = self.stats.game_priority
-                if self.stats.game_pid and prio in (None, "Normal",
-                                                    "Below Normal", "Idle",
-                                                    "Above Normal"):
-                    ok, _msg = self.stats.set_game_priority_high()
-                    if ok:
-                        self.log.ok(t("log.autoprio"))
+                if self.stats.game_pid:
+                    if prio in (None, "Normal", "Below Normal", "Idle",
+                                "Above Normal"):
+                        ok, _msg = self.stats.set_game_priority_high()
+                        if ok:
+                            self.log.ok(t("log.autoprio"))
+                    # FPS stability: all cores + 1 ms timer while in game
+                    _ok, msg = self.stats.set_game_affinity_all()
+                    if msg != "affinity ok":
+                        self.log.ok(f"affinity: {msg}")
+                    if not timer_on and self.stats.game_timer_resolution(True):
+                        timer_on = True
+                    if not tip_done:
+                        tip_done = True
+                        self.log.info(t("log.tip.fps"))
+                elif timer_on:
+                    self.stats.game_timer_resolution(False)
+                    timer_on = False
             except Exception:
                 pass
 
@@ -731,6 +748,20 @@ def show_splash(app):
 
 
 # ---------------- desktop launcher shortcut ----------------
+def _desktop_folder():
+    """Real user Desktop - handles the OneDrive known-folder move on Win11,
+    where %USERPROFILE%\\Desktop is no longer the desktop Explorer shows."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion"
+                            r"\Explorer\User Shell Folders") as k:
+            raw, _ = winreg.QueryValueEx(k, "Desktop")
+        return os.path.expandvars(str(raw))
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
 def _ensure_desktop_shortcut(app=None):
     """Self-heal: if there is no desktop shortcut, create one (with icon).
 
@@ -740,10 +771,23 @@ def _ensure_desktop_shortcut(app=None):
         return
     try:
         import subprocess
-        path = os.path.join(os.path.expanduser("~"), "Desktop",
-                            "Neon FPS Booster.lnk")
+        desktop = _desktop_folder()
+        path = os.path.join(desktop, "Neon FPS Booster.lnk")
+        legacy = os.path.join(os.path.expanduser("~"), "Desktop",
+                              "Neon FPS Booster.lnk")
         if os.path.exists(path):
             return
+        if os.path.exists(legacy) and not os.path.exists(path):
+            # shortcut was created on the pre-OneDrive path: move it over
+            try:
+                import shutil
+                os.makedirs(desktop, exist_ok=True)
+                shutil.move(legacy, path)
+                if app is not None:
+                    app.log.info(t("log.shortcut.created"))
+                return
+            except Exception:
+                pass
         appdir = os.path.dirname(os.path.abspath(__file__))
         base = os.path.dirname(os.path.abspath(sys.executable))
         pyw = os.path.join(base, "pythonw.exe")

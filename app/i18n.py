@@ -94,6 +94,7 @@ _EN = {
     "log.boost.start": "Boost started",
     "log.apps.closed": "Closed apps: {n}",
     "log.shortcut.created": "Desktop shortcut created",
+    "log.tip.fps": "Tip: in Roblox (Esc - Settings - Graphics) zet Max Framerate op het hoogste niveau voor stabiele hoge FPS",
 
     "modal.boost": "BOOST COMPLETE",
     "modal.before": "Before",
@@ -198,6 +199,7 @@ _NL = {
     "log.boost.start": "Boost gestart",
     "log.apps.closed": "Gesloten apps: {n}",
     "log.shortcut.created": "Snelkoppeling op bureaublad aangemaakt",
+    "log.tip.fps": "Tip: in Roblox (Esc - Instellingen - Grafisch) zet Max frame rate op het hoogste niveau voor stabiele hoge FPS",
 
     "modal.boost": "BOOST VOLTOOID",
     "modal.before": "Voor",

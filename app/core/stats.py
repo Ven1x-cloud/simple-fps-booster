@@ -154,3 +154,38 @@ class SystemStats:
             return True, f"{proc.name()} -> High"
         except Exception as e:
             return False, str(e)
+
+    def set_game_affinity_all(self):
+        """Lift any CPU-core restriction on the game (all cores again)."""
+        proc = self.find_game()
+        if proc is None:
+            return False, "not running"
+        try:
+            cur = proc.cpu_affinity()
+            n = psutil.cpu_count() or len(cur)
+            if len(cur) < n:
+                proc.cpu_affinity(list(range(n)))
+                return True, f"affinity -> {n} cores"
+            return True, "affinity ok"
+        except Exception as e:
+            return False, str(e)
+
+    def game_timer_resolution(self, enabled):
+        """Request 1 ms timer resolution while the game runs.
+
+        Windows coalesces timers to ~15 ms when idle, which shows up as
+        uneven frame pacing in games. timeBeginPeriod/timeEndPeriod are
+        reference-counted, so callers should pair one of each.
+        """
+        if not IS_WIN:
+            return False, "Windows only"
+        try:
+            import ctypes
+            winmm = ctypes.windll.winmm
+            if enabled:
+                winmm.timeBeginPeriod(1)
+                return True, "1ms timer on"
+            winmm.timeEndPeriod(1)
+            return True, "timer restored"
+        except Exception as e:
+            return False, str(e)
