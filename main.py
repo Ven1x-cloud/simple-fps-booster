@@ -131,6 +131,7 @@ class NeonApp:
         self._ui_queue = queue.Queue()
         self.current_page = "dashboard"
         self.pages = {}
+        self.install_info = _install_info()
 
         stored = self.settings.get("lang", "auto")
         set_lang(detect() if stored == "auto" else stored)
@@ -745,6 +746,19 @@ def show_splash(app):
         sp.focus_force()
     except Exception:
         pass
+
+
+def _install_info():
+    """Read install.json written by the installer (repo/branch/commit of
+    the code this installation was built from). {} when run from a repo."""
+    try:
+        import json
+        appdir = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(os.path.dirname(appdir), "install.json"),
+                  encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 # ---------------- desktop launcher shortcut ----------------

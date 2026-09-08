@@ -43,6 +43,13 @@ class SettingsPage(tk.Frame):
                  font=font(9, True)).pack(anchor="w")
         self.branch_ent = entry(rb, width=18)
         self.branch_ent.pack(anchor="w", pady=(2, 12))
+        # pre-fill: saved choice > what this install was built from > defaults
+        info = getattr(self.app, "install_info", None) or {}
+        self.repo_ent.insert(0, self.app.settings.get("repo")
+                             or info.get("repo")
+                             or "Ven1x-cloud/simple-fps-booster")
+        self.branch_ent.insert(0, self.app.settings.get("branch")
+                               or info.get("branch") or "main")
 
         fetch_row = tk.Frame(rb, bg=T.BG1)
         fetch_row.pack(anchor="w")
