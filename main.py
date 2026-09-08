@@ -741,7 +741,7 @@ def _ensure_desktop_shortcut(app=None):
     try:
         import subprocess
         path = os.path.join(os.path.expanduser("~"), "Desktop",
-                            f"{T.PRODUCT}.lnk")
+                            "Neon FPS Booster.lnk")
         if os.path.exists(path):
             return
         appdir = os.path.dirname(os.path.abspath(__file__))
