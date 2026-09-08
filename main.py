@@ -730,6 +730,48 @@ def show_splash(app):
         pass
 
 
+# ---------------- desktop launcher shortcut ----------------
+def _ensure_desktop_shortcut(app=None):
+    """Self-heal: if there is no desktop shortcut, create one (with icon).
+
+    Runs on a background thread so PowerShell startup never blocks the UI.
+    """
+    if not IS_WIN:
+        return
+    try:
+        import subprocess
+        path = os.path.join(os.path.expanduser("~"), "Desktop",
+                            f"{T.PRODUCT}.lnk")
+        if os.path.exists(path):
+            return
+        appdir = os.path.dirname(os.path.abspath(__file__))
+        base = os.path.dirname(os.path.abspath(sys.executable))
+        pyw = os.path.join(base, "pythonw.exe")
+        target = pyw if os.path.exists(pyw) else sys.executable
+        main_py = os.path.join(appdir, "main.py")
+        icon = os.path.join(appdir, "assets", "app.ico")
+        icon_line = (f'$s.IconLocation = "{icon}",0\n'
+                     if os.path.isfile(icon) else "")
+        ps = (
+            "$ws = New-Object -ComObject WScript.Shell\n"
+            f'$s = $ws.CreateShortcut("{path}")\n'
+            f'$s.TargetPath = "{target}"\n'
+            f'$s.Arguments = "\"{main_py}\""\n'
+            f'$s.WorkingDirectory = "{appdir}"\n'
+            f"{icon_line}"
+            f'$s.Description = "{T.PRODUCT}"\n'
+            "$s.Save()"
+        )
+        subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy",
+                        "Bypass", "-Command", ps],
+                       capture_output=True, text=True, timeout=120)
+        if app is not None:
+            if os.path.exists(path):
+                app.log.info(t("log.shortcut.created"))
+    except Exception:
+        pass
+
+
 def main(debug=False):
     if not _GUI_OK:
         sys.stderr.write(
@@ -749,6 +791,8 @@ def main(debug=False):
         app.log.subscribe(
             lambda e: print(f"  [{e['level']:5}] {e['msg']}", flush=True))
     show_splash(app)
+    threading.Thread(target=_ensure_desktop_shortcut, args=(app,),
+                     daemon=True).start()
     app.root.mainloop()
     return app
 

@@ -93,6 +93,7 @@ _EN = {
     "log.reverted": "Defaults restored",
     "log.boost.start": "Boost started",
     "log.apps.closed": "Closed apps: {n}",
+    "log.shortcut.created": "Desktop shortcut created",
 
     "modal.boost": "BOOST COMPLETE",
     "modal.before": "Before",
@@ -196,6 +197,7 @@ _NL = {
     "log.reverted": "Standaardinstellingen hersteld",
     "log.boost.start": "Boost gestart",
     "log.apps.closed": "Gesloten apps: {n}",
+    "log.shortcut.created": "Snelkoppeling op bureaublad aangemaakt",
 
     "modal.boost": "BOOST VOLTOOID",
     "modal.before": "Voor",
