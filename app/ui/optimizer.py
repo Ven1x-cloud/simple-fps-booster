@@ -47,9 +47,9 @@ class OptimizerPage(tk.Frame):
                 self._item_row(b, item_id)
 
     def _item_row(self, parent, item_id):
-        row = tk.Frame(parent, bg=T.BG1, cursor="hand2")
-        row.pack(fill="x", pady=3, ipady=7, padx=4,
-                 highlightbackground=T.BORDER, highlightthickness=1)
+        row = tk.Frame(parent, bg=T.BG1, cursor="hand2",
+                       highlightbackground=T.BORDER, highlightthickness=1)
+        row.pack(fill="x", pady=3, ipady=7, padx=4)
 
         val = bool(self.app.settings.get(f"opt.{item_id}", False))
         tg = Toggle(row, value=val, command=lambda v, k=item_id: self._toggle(k, v))
