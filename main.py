@@ -283,7 +283,8 @@ class NeonApp:
         active = self.current_page == key
         bg = T.BG2 if (active or hover) else T.BG1
         fg = T.TEXT if (active or hover) else T.TEXT_DIM
-        for w in (b["row"], b["icon"], b["txt"]):
+        b["row"].configure(bg=bg)
+        for w in (b["icon"], b["txt"]):
             w.configure(bg=bg, fg=fg)
         b["bar"].configure(bg=T.ACCENT if active else T.BG1)
 
