@@ -257,8 +257,38 @@ def desktop_folder():
 
 
 def make_shortcut(path, target, args, workdir, icon=None):
-    """Create a .lnk via PowerShell (Windows only)."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    """Create a .lnk. wscript first (fast, no PowerShell cold-start hangs),
+    PowerShell as fallback. Never raises; returns True on success."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except OSError:
+        return False
+    # --- attempt 1: VBScript via wscript (fast, classic) ---
+    tmp = (os.environ.get("TEMP") or os.environ.get("TMP") or
+           os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp"))
+    vbs = os.path.join(tmp, "neon_fps_mkshortcut.vbs")
+    q = lambda s: str(s).replace('"', '""')  # noqa: E731 (VBS quoting)
+    lines = [
+        'Set ws = CreateObject("WScript.Shell")',
+        f'Set s = ws.CreateShortcut("{q(path)}")',
+        f's.TargetPath = "{q(target)}"',
+        f's.Arguments = "{q(args)}"',
+        f's.WorkingDirectory = "{q(workdir)}"',
+    ]
+    if icon:
+        lines.append(f's.IconLocation = "{q(icon)}",0')
+    lines.append(f's.Description = "{q(PRODUCT)}"')
+    lines.append('s.Save')
+    try:
+        with open(vbs, "w", encoding="ascii", errors="replace") as f:
+            f.write("\r\n".join(lines) + "\r\n")
+        r = subprocess.run(["wscript", "//B", vbs], capture_output=True,
+                           text=True, timeout=60)
+        if r.returncode == 0 and os.path.exists(path):
+            return True
+    except Exception:
+        pass
+    # --- attempt 2: PowerShell fallback (slow cold start possible) ---
     icon_line = f'$s.IconLocation = "{icon}",0' if icon else ""
     ps = (
         "$ws = New-Object -ComObject WScript.Shell\n"
@@ -270,9 +300,15 @@ def make_shortcut(path, target, args, workdir, icon=None):
         f'$s.Description = "{PRODUCT}"\n'
         "$s.Save()"
     )
-    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                        "-Command", ps], capture_output=True, text=True, timeout=90)
-    return r.returncode == 0
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy",
+                            "Bypass", "-Command", ps], capture_output=True,
+                           text=True, timeout=120)
+        if r.returncode == 0 and os.path.exists(path):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def main():
@@ -448,24 +484,30 @@ def main():
                 ok(f"moved existing shortcut to {desktop}")
             except Exception:
                 pass
-        if shortcuts.get("desktop", True) and not os.path.exists(desktop) \
-                and make_shortcut(
-                desktop, pythonw(venv_dir), f'"{launched_target}"',
-                appdir, icon_path):
-            ok(desktop)
-            created.append(desktop)
+
+        def _mk(label, path, target_py):
+            # a shortcut failure must never abort the install itself
+            try:
+                good = make_shortcut(path, pythonw(venv_dir),
+                                     f'"{target_py}"', appdir, icon_path)
+            except Exception as e:
+                warn(f"{label} shortcut error: {e}")
+                return
+            if good:
+                ok(path)
+                created.append(path)
+            else:
+                warn(f"{label} shortcut could not be created")
+
+        if shortcuts.get("desktop", True) and not os.path.exists(desktop):
+            _mk("desktop", desktop, launched_target)
         sm_dir = os.path.join(os.environ.get("APPDATA", ""),
                               "Microsoft", "Windows", "Start Menu", "Programs", name)
         sm = os.path.join(sm_dir, f"{name}.lnk")
-        if shortcuts.get("startmenu", True) and make_shortcut(
-                sm, pythonw(venv_dir), f'"{launched_target}"', appdir, icon_path):
-            ok(sm)
-            created.append(sm)
+        if shortcuts.get("startmenu", True):
+            _mk("start menu", sm, launched_target)
         unlnk = os.path.join(sm_dir, "Uninstall Neon FPS Booster.lnk")
-        if make_shortcut(unlnk, pythonw(venv_dir),
-                         f'"{os.path.join(appdir, "uninstall.py")}"',
-                         appdir, icon_path):
-            ok(unlnk)
+        _mk("uninstall", unlnk, os.path.join(appdir, "uninstall.py"))
     elif not IS_WIN and not dry:
         ok(f"run with: {venv_python(venv_dir)} \"{launched_target}\"")
     else:

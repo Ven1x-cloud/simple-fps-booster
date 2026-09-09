@@ -807,24 +807,49 @@ def _ensure_desktop_shortcut(app=None):
         target = pyw if os.path.exists(pyw) else sys.executable
         main_py = os.path.join(appdir, "main.py")
         icon = os.path.join(appdir, "assets", "app.ico")
-        icon_line = (f'$s.IconLocation = "{icon}",0\n'
-                     if os.path.isfile(icon) else "")
-        ps = (
-            "$ws = New-Object -ComObject WScript.Shell\n"
-            f'$s = $ws.CreateShortcut("{path}")\n'
-            f'$s.TargetPath = "{target}"\n'
-            f'$s.Arguments = "\"{main_py}\""\n'
-            f'$s.WorkingDirectory = "{appdir}"\n'
-            f"{icon_line}"
-            f'$s.Description = "{T.PRODUCT}"\n'
-            "$s.Save()"
-        )
-        subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy",
-                        "Bypass", "-Command", ps],
-                       capture_output=True, text=True, timeout=120)
-        if app is not None:
-            if os.path.exists(path):
-                app.log.info(t("log.shortcut.created"))
+        made = False
+        # wscript first (fast; powershell cold-starts can hang for 90s+)
+        tmp = os.environ.get("TEMP") or os.environ.get("TMP") or appdir
+        q = lambda s: str(s).replace('"', '""')  # noqa: E731
+        vbs = os.path.join(tmp, "neon_fps_mkshortcut.vbs")
+        lines_ = [
+            'Set ws = CreateObject("WScript.Shell")',
+            f'Set s = ws.CreateShortcut("{q(path)}")',
+            f's.TargetPath = "{q(target)}"',
+            f's.Arguments = "{q(main_py)}"',
+            f's.WorkingDirectory = "{q(appdir)}"',
+        ]
+        if os.path.isfile(icon):
+            lines_.append(f's.IconLocation = "{q(icon)}",0')
+        lines_.append('s.Description = "Neon FPS Booster"')
+        lines_.append('s.Save')
+        try:
+            with open(vbs, "w", encoding="ascii", errors="replace") as f:
+                f.write("\r\n".join(lines_) + "\r\n")
+            r = subprocess.run(["wscript", "//B", vbs], capture_output=True,
+                               text=True, timeout=60)
+            made = r.returncode == 0 and os.path.exists(path)
+        except Exception:
+            made = False
+        if not made:
+            icon_line = (f'$s.IconLocation = "{icon}",0\n'
+                         if os.path.isfile(icon) else "")
+            args_str = f'"{main_py}"'
+            ps = (
+                "$ws = New-Object -ComObject WScript.Shell\n"
+                f'$s = $ws.CreateShortcut("{path}")\n'
+                f'$s.TargetPath = "{target}"\n'
+                f'$s.Arguments = "{args_str}"\n'
+                f'$s.WorkingDirectory = "{appdir}"\n'
+                f"{icon_line}"
+                f'$s.Description = "{T.PRODUCT}"\n'
+                "$s.Save()"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy",
+                            "Bypass", "-Command", ps],
+                           capture_output=True, text=True, timeout=120)
+        if app is not None and os.path.exists(path):
+            app.log.info(t("log.shortcut.created"))
     except Exception:
         pass
 
