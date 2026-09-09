@@ -329,9 +329,16 @@ def main():
     if not dry:
         if os.path.isdir(appdir):
             shutil.rmtree(appdir, ignore_errors=True)
+            if os.path.isdir(appdir):
+                # a running app holds this folder (its working directory):
+                # files still get replaced, the folder itself just stays
+                info("app is running - updating files in place "
+                     "(close & restart the app afterwards to load the new "
+                     "version)")
         shutil.copytree(src, appdir,
                         ignore=shutil.ignore_patterns(".git", "__pycache__",
-                                                      "*.pyc", "venv"))
+                                                      "*.pyc", "venv"),
+                        dirs_exist_ok=True)
     ok(f"app -> {appdir}")
     ok(f"venv -> {venv_dir}")
 
@@ -341,11 +348,16 @@ def main():
     if not dry:
         if os.path.isdir(venv_dir):
             shutil.rmtree(venv_dir, ignore_errors=True)
-        info("creating venv")
-        r = subprocess.run([sys.executable, "-m", "venv", venv_dir],
-                           capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
-            raise SystemExit(err(f"venv creation failed:\n{r.stderr[-400:]}"))
+        if os.path.isdir(venv_dir):
+            # running pythonw.exe locks files inside: reuse the environment,
+            # the pip steps below still bring it up to date
+            info("venv in use - reusing existing environment")
+        else:
+            info("creating venv")
+            r = subprocess.run([sys.executable, "-m", "venv", venv_dir],
+                               capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                raise SystemExit(err(f"venv creation failed:\n{r.stderr[-400:]}"))
         info("upgrading pip")
         subprocess.run([vpy, "-m", "pip", "install", "-q", "-U", "pip"],
                        capture_output=True, timeout=600)
