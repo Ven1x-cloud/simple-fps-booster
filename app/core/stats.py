@@ -148,17 +148,31 @@ class SystemStats:
             return False, "not running"
         try:
             if IS_WIN:
-                # Call the Windows API directly: psutil's nice() uses an
-                # internal code mapping that Windows rejects (WinError 87)
-                # on some systems, so it never actually raised priority.
+                # Direct Windows API call with explicit types (psutil's
+                # nice() mapping is rejected on some systems: WinError 87).
                 import ctypes
                 k32 = ctypes.windll.kernel32
-                h = k32.OpenProcess(0x0008, False, proc.pid)  # PROCESS_SET_INFORMATION
+                k32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int,
+                                            ctypes.c_ulong]
+                k32.OpenProcess.restype = ctypes.c_void_p
+                k32.SetPriorityClass.argtypes = [ctypes.c_void_p,
+                                                 ctypes.c_ulong]
+                k32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+                k32.GetPriorityClass.restype = ctypes.c_ulong
+                h = k32.OpenProcess(0x0008, 0, proc.pid)  # PROCESS_SET_INFORMATION
                 if not h:
-                    return False, "process handle refused"
+                    return False, f"OpenProcess err {ctypes.GetLastError()}"
                 try:
-                    if not k32.SetPriorityClass(h, 3):  # HIGH_PRIORITY_CLASS
-                        return False, f"error {ctypes.GetLastError()}"
+                    cur = k32.GetPriorityClass(h)
+                    if cur in (3, 7, 24):
+                        label = {3: "High", 7: "Above Normal",
+                                 24: "Realtime"}.get(int(cur), str(cur))
+                        return True, f"{proc.name()} -> already {label}"
+                    for cls, label in ((3, "High"), (7, "Above Normal")):
+                        if k32.SetPriorityClass(h, cls):
+                            return True, f"{proc.name()} -> {label}"
+                    return False, (f"blocked (err {ctypes.GetLastError()}, "
+                                   f"cur={int(cur)})")
                 finally:
                     k32.CloseHandle(h)
             else:

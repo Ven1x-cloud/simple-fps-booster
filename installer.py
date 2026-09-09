@@ -256,19 +256,52 @@ def desktop_folder():
         return os.path.join(os.path.expanduser("~"), "Desktop")
 
 
-def make_shortcut(path, target, args, workdir, icon=None):
-    """Create a .lnk. wscript first (fast, no PowerShell cold-start hangs),
-    PowerShell as fallback. Never raises; returns True on success."""
+def _lnk_write(path, target, args, workdir, icon=None):
+    """Write the .lnk binary directly (MS-SHLINK format) - no COM needed.
+    Works even when wscript/powershell shortcut creation is blocked."""
+    import struct
+    import time
+    flags = 0x02 | 0x04 | 0x08 | 0x4000 | 0x200  # IDLIST|WORKDIR|PARAMS|UNICODE|NOUI
+    if icon:
+        flags |= 0x10
+    def u16(text):
+        text = text or ""
+        return (struct.pack("<H", len(text)) + text.encode("utf-16-le")
+                + struct.pack("<H", 0))
+    ft = struct.pack("<Q", int((time.time() + 11644473600) * 10_000_000))
+    header = (b"\x4c\x00\x00\x00" + struct.pack("<I", flags)
+              + struct.pack("<I", 0x20) + ft + ft + ft
+              + struct.pack("<I", 0) + struct.pack("<H", 0))
+    body = (u16(target) + u16(workdir) + struct.pack("<I", 0)
+            + u16(args or ""))
+    if icon:
+        body += u16(icon) + struct.pack("<H", 0)
+    try:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(header + b"\x02\x00" + body)
+        return os.path.exists(path)
+    except Exception:
+        return False
+
+
+def make_shortcut(path, target, args, workdir, icon=None, allow_bat=False):
+    """Create a .lnk. Tries wscript, then PowerShell, then writes the
+    .lnk binary in pure Python; `allow_bat` adds a .bat fallback (desktop
+    launcher only). Never raises; returns (ok, detail)."""
+    last = "no method attempted"
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-    except OSError:
-        return False
-    # --- attempt 1: VBScript via wscript (fast, classic) ---
+    except OSError as e:
+        return False, f"cannot create folder: {e}"
+    # --- 1: VBScript via wscript (fast, classic) ---
     tmp = (os.environ.get("TEMP") or os.environ.get("TMP") or
            os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp"))
     vbs = os.path.join(tmp, "neon_fps_mkshortcut.vbs")
     q = lambda s: str(s).replace('"', '""')  # noqa: E731 (VBS quoting)
-    lines = [
+    vlines = [
         'Set ws = CreateObject("WScript.Shell")',
         f'Set s = ws.CreateShortcut("{q(path)}")',
         f's.TargetPath = "{q(target)}"',
@@ -276,19 +309,20 @@ def make_shortcut(path, target, args, workdir, icon=None):
         f's.WorkingDirectory = "{q(workdir)}"',
     ]
     if icon:
-        lines.append(f's.IconLocation = "{q(icon)}",0')
-    lines.append(f's.Description = "{q(PRODUCT)}"')
-    lines.append('s.Save')
+        vlines.append(f's.IconLocation = "{q(icon)}",0')
+    vlines.append(f's.Description = "{q(PRODUCT)}"')
+    vlines.append('s.Save')
     try:
         with open(vbs, "w", encoding="ascii", errors="replace") as f:
-            f.write("\r\n".join(lines) + "\r\n")
+            f.write("\r\n".join(vlines) + "\r\n")
         r = subprocess.run(["wscript", "//B", vbs], capture_output=True,
                            text=True, timeout=60)
         if r.returncode == 0 and os.path.exists(path):
-            return True
-    except Exception:
-        pass
-    # --- attempt 2: PowerShell fallback (slow cold start possible) ---
+            return True, "wscript"
+        last = f"wscript rc={r.returncode}: {r.stderr.strip()[:120]}"
+    except Exception as e:
+        last = f"wscript: {e}"
+    # --- 2: PowerShell fallback (slow cold start possible) ---
     icon_line = f'$s.IconLocation = "{icon}",0' if icon else ""
     ps = (
         "$ws = New-Object -ComObject WScript.Shell\n"
@@ -305,10 +339,26 @@ def make_shortcut(path, target, args, workdir, icon=None):
                             "Bypass", "-Command", ps], capture_output=True,
                            text=True, timeout=120)
         if r.returncode == 0 and os.path.exists(path):
-            return True
-    except Exception:
-        pass
-    return False
+            return True, "powershell"
+        last = (f"powershell rc={r.returncode}: "
+                f"{(r.stderr or r.stdout).strip()[:120]}")
+    except Exception as e:
+        last = f"powershell: {e}"
+    # --- 3: pure-Python .lnk binary (no COM at all) ---
+    if _lnk_write(path, target, args, workdir, icon):
+        return True, "python .lnk writer"
+    last += " | python .lnk writer: write failed"
+    # --- 4: .bat fallback (desktop launcher only, no custom icon) ---
+    if allow_bat:
+        bat = os.path.splitext(path)[0] + ".bat"
+        try:
+            with open(bat, "w", encoding="ascii", errors="replace") as f:
+                f.write("@echo off\r\nrem Neon FPS Booster launcher\r\n"
+                        f'start "" "{target}" "{args}"\r\n')
+            return True, f"bat fallback ({os.path.basename(bat)})"
+        except Exception as e:
+            last += f" | bat: {e}"
+    return False, last
 
 
 def main():
@@ -485,22 +535,23 @@ def main():
             except Exception:
                 pass
 
-        def _mk(label, path, target_py):
+        def _mk(label, path, target_py, allow_bat=False):
             # a shortcut failure must never abort the install itself
             try:
-                good = make_shortcut(path, pythonw(venv_dir),
-                                     f'"{target_py}"', appdir, icon_path)
+                good, detail = make_shortcut(path, pythonw(venv_dir),
+                                             f'"{target_py}"', appdir,
+                                             icon_path, allow_bat=allow_bat)
             except Exception as e:
                 warn(f"{label} shortcut error: {e}")
                 return
             if good:
-                ok(path)
+                ok(f"{path}  [{detail}]")
                 created.append(path)
             else:
-                warn(f"{label} shortcut could not be created")
+                warn(f"{label} shortcut could not be created - {detail}")
 
         if shortcuts.get("desktop", True) and not os.path.exists(desktop):
-            _mk("desktop", desktop, launched_target)
+            _mk("desktop", desktop, launched_target, allow_bat=True)
         sm_dir = os.path.join(os.environ.get("APPDATA", ""),
                               "Microsoft", "Windows", "Start Menu", "Programs", name)
         sm = os.path.join(sm_dir, f"{name}.lnk")

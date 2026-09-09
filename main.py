@@ -848,6 +848,15 @@ def _ensure_desktop_shortcut(app=None):
             subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy",
                             "Bypass", "-Command", ps],
                            capture_output=True, text=True, timeout=120)
+        if not os.path.exists(path):
+            # last resort: write the shortcut file in pure Python (no COM),
+            # or a .bat launcher if even that fails
+            from app.core.lnk import write_lnk, write_bat
+            write_lnk(path, target, main_py, appdir,
+                      icon if os.path.isfile(icon) else None)
+            if not os.path.exists(path):
+                write_bat(os.path.splitext(path)[0] + ".bat", target,
+                          f'"{main_py}"')
         if app is not None and os.path.exists(path):
             app.log.info(t("log.shortcut.created"))
     except Exception:
