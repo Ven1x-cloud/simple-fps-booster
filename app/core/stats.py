@@ -148,7 +148,19 @@ class SystemStats:
             return False, "not running"
         try:
             if IS_WIN:
-                proc.nice(3)  # HIGH_PRIORITY_CLASS
+                # Call the Windows API directly: psutil's nice() uses an
+                # internal code mapping that Windows rejects (WinError 87)
+                # on some systems, so it never actually raised priority.
+                import ctypes
+                k32 = ctypes.windll.kernel32
+                h = k32.OpenProcess(0x0008, False, proc.pid)  # PROCESS_SET_INFORMATION
+                if not h:
+                    return False, "process handle refused"
+                try:
+                    if not k32.SetPriorityClass(h, 3):  # HIGH_PRIORITY_CLASS
+                        return False, f"error {ctypes.GetLastError()}"
+                finally:
+                    k32.CloseHandle(h)
             else:
                 proc.nice(0)
             return True, f"{proc.name()} -> High"

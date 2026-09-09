@@ -512,8 +512,7 @@ class NeonApp:
                     continue
                 prio = self.stats.game_priority
                 if self.stats.game_pid:
-                    if prio in (None, "Normal", "Below Normal", "Idle",
-                                "Above Normal"):
+                    if prio in (None, "Normal", "Below Normal", "Idle"):
                         ok, _msg = self.stats.set_game_priority_high()
                         if ok:
                             self.log.ok(t("log.autoprio"))
